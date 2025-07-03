@@ -14,6 +14,58 @@ const verifyToken = require("../../middleware/verifyToken.js");
 /**
  * @swagger
  * /transaction:
+ *   post:
+ *     summary: Create a new transaction
+ *     tags: [Transaction]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *               - category_id
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *               category_id:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Transaction created successfully
+ */
+router.post("/", verifyToken, async (req, res) => {
+  try {
+    const { amount, description, category_id } = req.body;
+
+    const newTransaction = await knex("transaction")
+      .insert({
+        id: uuidv4(),
+        amount,
+        description,
+        category_id,
+        auth_user_id: req.user.id,
+        created_at: knex.fn.now(),
+        updated_at: knex.fn.now(),
+      })
+      .returning("*");
+
+    res.status(201).json(newTransaction[0]);
+  } catch (error) {
+    console.error("POST /transaction error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /transaction:
  *   get:
  *     summary: Get all transactions with pagination, filtering, sorting
  *     tags: [Transaction]
@@ -75,55 +127,43 @@ router.get("/", verifyToken, async (req, res) => {
 
 /**
  * @swagger
- * /transaction:
- *   post:
- *     summary: Create a new transaction
+ * /transaction/{id}:
+ *   get:
+ *     summary: Get a single transaction by ID
  *     tags: [Transaction]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - amount
- *               - description
- *               - category_id
- *             properties:
- *               amount:
- *                 type: number
- *               description:
- *                 type: string
- *               category_id:
- *                 type: string
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The transaction ID
  *     responses:
- *       201:
- *         description: Transaction created successfully
+ *       200:
+ *         description: The transaction data
  */
-router.post("/", verifyToken, async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
-    const { amount, description, category_id } = req.body;
+    const { id } = req.params;
+    const transaction = await knex("transaction")
+      .where({ id, auth_user_id: req.user.id })
+      .first();
 
-    const newTransaction = await knex("transaction")
-      .insert({
-        id: uuidv4(),
-        amount,
-        description,
-        category_id,
-        auth_user_id: req.user.id,
-        created_at: knex.fn.now(),
-        updated_at: knex.fn.now(),
-      })
-      .returning("*");
+    if (!transaction) {
+      return res.status(404).json({ error: "Transaction not found" });
+    }
 
-    res.status(201).json(newTransaction[0]);
+    res.json(transaction);
   } catch (error) {
-    console.error("POST /transaction error:", error);
+    console.error("GET /transaction/:id error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+
 
 /**
  * @swagger

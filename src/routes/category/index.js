@@ -14,6 +14,55 @@ const verifyToken = require("../../middleware/verifyToken.js");
 /**
  * @swagger
  * /category:
+ *   post:
+ *     summary: Create a new category
+ *     tags: [Category]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - type
+ *             properties:
+ *               name:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *                 enum: [income, expense]
+ *     responses:
+ *       201:
+ *         description: Category created successfully
+ */
+router.post("/", verifyToken, async (req, res) => {
+  try {
+    const { name, type } = req.body;
+
+    const newCategory = await knex("category")
+      .insert({
+        id: uuidv4(),
+        name,
+        type,
+        auth_user_id: req.user.id,
+        created_at: knex.fn.now(),
+        updated_at: knex.fn.now(),
+      })
+      .returning("*");
+
+    res.status(201).json(newCategory[0]);
+  } catch (error) {
+    console.error("POST /category error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * @swagger
+ * /category:
  *   get:
  *     summary: Get all categories with pagination, filtering, sorting
  *     tags: [Category]
@@ -80,52 +129,43 @@ router.get("/", verifyToken, async (req, res) => {
 
 /**
  * @swagger
- * /category:
- *   post:
- *     summary: Create a new category
+ * /category/{id}:
+ *   get:
+ *     summary: Get a single category by ID
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *               - type
- *             properties:
- *               name:
- *                 type: string
- *               type:
- *                 type: string
- *                 enum: [income, expense]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The category ID
  *     responses:
- *       201:
- *         description: Category created successfully
+ *       200:
+ *         description: The category data
  */
-router.post("/", verifyToken, async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
-    const { name, type } = req.body;
+    const { id } = req.params;
+    const category = await knex("category")
+      .where({ id, auth_user_id: req.user.id })
+      .first();
 
-    const newCategory = await knex("category")
-      .insert({
-        id: uuidv4(),
-        name,
-        type,
-        auth_user_id: req.user.id,
-        created_at: knex.fn.now(),
-        updated_at: knex.fn.now(),
-      })
-      .returning("*");
+    if (!category) {
+      return res.status(404).json({ error: "Category not found" });
+    }
 
-    res.status(201).json(newCategory[0]);
+    res.json(category);
   } catch (error) {
-    console.error("POST /category error:", error);
+    console.error("GET /category/:id error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+
 
 /**
  * @swagger
