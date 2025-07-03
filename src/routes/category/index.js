@@ -13,19 +13,64 @@ const verifyToken = require("../../middleware/verifyToken.js");
 
 /**
  * @swagger
- * /api/category:
+ * /category:
  *   get:
- *     summary: Get all categories
+ *     summary: Get all categories with pagination, filtering, sorting
  *     tags: [Category]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Page number
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *         description: Number of items per page
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *         description: Filter by category name
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *         description: Field to sort by
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *         description: Sort order
  *     responses:
  *       200:
  *         description: List of categories
  */
 router.get("/", verifyToken, async (req, res) => {
   try {
-    const categories = await knex("category").where({ auth_user_id: req.user.id });
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const offset = (page - 1) * pageSize;
+
+    const sortBy = req.query.sortBy || "created_at";
+    const order = req.query.order === "desc" ? "desc" : "asc";
+    const nameFilter = req.query.name;
+
+    let query = knex("category").where({ auth_user_id: req.user.id });
+
+    if (nameFilter) {
+      query = query.andWhere("name", "like", `%${nameFilter}%`);
+    }
+
+    const categories = await query
+      .orderBy(sortBy, order)
+      .limit(pageSize)
+      .offset(offset);
+
     res.json(categories);
   } catch (error) {
     console.error("GET /category error:", error);
@@ -35,7 +80,7 @@ router.get("/", verifyToken, async (req, res) => {
 
 /**
  * @swagger
- * /api/category:
+ * /category:
  *   post:
  *     summary: Create a new category
  *     tags: [Category]
@@ -84,7 +129,7 @@ router.post("/", verifyToken, async (req, res) => {
 
 /**
  * @swagger
- * /api/category/{id}:
+ * /category/{id}:
  *   put:
  *     summary: Update a category
  *     tags: [Category]
@@ -114,7 +159,7 @@ router.post("/", verifyToken, async (req, res) => {
  *                 enum: [income, expense]
  *     responses:
  *       200:
- *         description: Category updated
+ *         description: Category updated successfully
  */
 router.put("/:id", verifyToken, async (req, res) => {
   try {
@@ -135,7 +180,7 @@ router.put("/:id", verifyToken, async (req, res) => {
 
 /**
  * @swagger
- * /api/category/{id}:
+ * /category/{id}:
  *   delete:
  *     summary: Delete a category
  *     tags: [Category]
@@ -150,7 +195,7 @@ router.put("/:id", verifyToken, async (req, res) => {
  *         description: Category ID
  *     responses:
  *       200:
- *         description: Category deleted
+ *         description: Category deleted successfully
  */
 router.delete("/:id", verifyToken, async (req, res) => {
   try {
@@ -159,7 +204,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
       .where({ id, auth_user_id: req.user.id })
       .del();
 
-    res.json({ message: "Category deleted" });
+    res.json({ message: "Category deleted successfully" });
   } catch (error) {
     console.error("DELETE /category/:id error:", error);
     res.status(500).json({ error: "Internal server error" });

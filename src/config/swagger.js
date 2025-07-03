@@ -11,7 +11,7 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:3000/api",
+         url: "https://meric-trackerknex.mhkb1d.easypanel.host/api"
       },
     ],
     components: {

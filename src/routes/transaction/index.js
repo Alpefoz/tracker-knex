@@ -7,29 +7,65 @@ const verifyToken = require("../../middleware/verifyToken.js");
 /**
  * @swagger
  * tags:
- *   name: Transactions
- *   description: Transaction işlemleri
+ *   name: Transaction
+ *   description: Transaction management
  */
 
 /**
  * @swagger
  * /transaction:
  *   get:
- *     summary: Tüm transactionları getir
- *     tags: [Transactions]
+ *     summary: Get all transactions with pagination, filtering, sorting
+ *     tags: [Transaction]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: description
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
  *     responses:
  *       200:
- *         description: Transaction listesi başarıyla döndürüldü
- *       401:
- *         description: Yetkisiz
+ *         description: List of transactions
  */
 router.get("/", verifyToken, async (req, res) => {
   try {
-    const transactions = await knex("transaction")
-      .where("auth_user_id", req.user.id)
-      .select("*");
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const offset = (page - 1) * pageSize;
+
+    const sortBy = req.query.sortBy || "created_at";
+    const order = req.query.order === "desc" ? "desc" : "asc";
+    const descriptionFilter = req.query.description;
+
+    let query = knex("transaction").where({ auth_user_id: req.user.id });
+
+    if (descriptionFilter) {
+      query = query.andWhere("description", "like", `%${descriptionFilter}%`);
+    }
+
+    const transactions = await query
+      .orderBy(sortBy, order)
+      .limit(pageSize)
+      .offset(offset);
+
     res.json(transactions);
   } catch (error) {
     console.error("GET /transaction error:", error);
@@ -41,8 +77,8 @@ router.get("/", verifyToken, async (req, res) => {
  * @swagger
  * /transaction:
  *   post:
- *     summary: Yeni bir transaction oluştur
- *     tags: [Transactions]
+ *     summary: Create a new transaction
+ *     tags: [Transaction]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -52,37 +88,30 @@ router.get("/", verifyToken, async (req, res) => {
  *           schema:
  *             type: object
  *             required:
- *               - title
  *               - amount
+ *               - description
  *               - category_id
- *               - type
  *             properties:
- *               title:
- *                 type: string
  *               amount:
  *                 type: number
+ *               description:
+ *                 type: string
  *               category_id:
  *                 type: string
- *               type:
- *                 type: string
- *                 enum: [INCOME, EXPENSE]
  *     responses:
  *       201:
- *         description: Transaction başarıyla oluşturuldu
- *       401:
- *         description: Yetkisiz
+ *         description: Transaction created successfully
  */
 router.post("/", verifyToken, async (req, res) => {
   try {
-    const { title, amount, category_id, type } = req.body;
+    const { amount, description, category_id } = req.body;
 
     const newTransaction = await knex("transaction")
       .insert({
         id: uuidv4(),
-        title,
         amount,
+        description,
         category_id,
-        type,
         auth_user_id: req.user.id,
         created_at: knex.fn.now(),
         updated_at: knex.fn.now(),
@@ -100,50 +129,48 @@ router.post("/", verifyToken, async (req, res) => {
  * @swagger
  * /transaction/{id}:
  *   put:
- *     summary: Transaction güncelle
- *     tags: [Transactions]
+ *     summary: Update a transaction
+ *     tags: [Transaction]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         description: Güncellenecek transaction ID
+ *       - in: path
+ *         name: id
  *         schema:
  *           type: string
+ *         required: true
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *               - category_id
  *             properties:
- *               title:
- *                 type: string
  *               amount:
  *                 type: number
- *               category_id:
+ *               description:
  *                 type: string
- *               type:
+ *               category_id:
  *                 type: string
  *     responses:
  *       200:
- *         description: Transaction başarıyla güncellendi
- *       401:
- *         description: Yetkisiz
+ *         description: Transaction updated successfully
  */
 router.put("/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, amount, category_id, type } = req.body;
+    const { amount, description, category_id } = req.body;
 
     const updated = await knex("transaction")
       .where({ id, auth_user_id: req.user.id })
       .update({
-        title,
         amount,
+        description,
         category_id,
-        type,
         updated_at: knex.fn.now(),
       })
       .returning("*");
@@ -159,32 +186,28 @@ router.put("/:id", verifyToken, async (req, res) => {
  * @swagger
  * /transaction/{id}:
  *   delete:
- *     summary: Transaction sil
- *     tags: [Transactions]
+ *     summary: Delete a transaction
+ *     tags: [Transaction]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         description: Silinecek transaction ID
+ *       - in: path
+ *         name: id
  *         schema:
  *           type: string
+ *         required: true
  *     responses:
  *       200:
- *         description: Transaction başarıyla silindi
- *       401:
- *         description: Yetkisiz
+ *         description: Transaction deleted successfully
  */
 router.delete("/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-
     await knex("transaction")
       .where({ id, auth_user_id: req.user.id })
       .del();
 
-    res.json({ message: "Transaction deleted" });
+    res.json({ message: "Transaction deleted successfully" });
   } catch (error) {
     console.error("DELETE /transaction/:id error:", error);
     res.status(500).json({ error: "Internal server error" });
